@@ -30,6 +30,13 @@ export interface ApiErrorEnvelope {
   error: ApiError;
 }
 
+export interface NGO {
+  id: string;
+  name: string;
+  external_id?: string | null;
+  registration_number?: string | null;
+}
+
 export type ProjectSector =
   | "HEALTHCARE"
   | "EDUCATION"

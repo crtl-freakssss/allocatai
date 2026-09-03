@@ -13,6 +13,14 @@ from app.schemas.enums import ProjectSector
 
 logger = logging.getLogger("allocateai.seed")
 
+STATUTORY_NGOS = [
+    ("NGO-0001", "Global Hope Foundation", "REG-GHF-2026"),
+    ("NGO-0002", "Asha Jyoti Rural Trust", "REG-AJT-2026"),
+    ("NGO-0003", "Rural Upliftment Sansthan", "REG-RUS-2026"),
+    ("NGO-0004", "Clean Energy India Society", "REG-CEI-2026"),
+    ("NGO-0005", "Himalayan Aid Society", "REG-HAS-2026"),
+]
+
 DEMO_PROJECTS = [
     {
         "name": "Assam Rural Clean Drinking Water Station",
@@ -83,12 +91,24 @@ def seed_demo_data_if_needed() -> None:
         dna_engine = RealImpactDNAEngine()
         dd_engine = RealDueDiligenceEngine()
 
+        # Seed 5 statutory NGOs if missing
+        seeded_ngos = []
+        for ext_id, name, reg_no in STATUTORY_NGOS:
+            ngo_item = ngo_repo.get_by_external_id(ext_id)
+            if not ngo_item:
+                ngo_item = ngo_repo.create(
+                    name=name,
+                    external_id=ext_id,
+                    registration_number=reg_no
+                )
+                session.commit()
+            seeded_ngos.append(ngo_item)
+
         # Check existing count
         existing_projects, total = proj_repo.list(page=1, page_size=1)
         if total > 0:
-            logger.info(f"Database already contains {total} projects. Ensuring seed NGO due diligence report...")
-            ngo = ngo_repo.get_by_external_id("NGO-SEED-001")
-            if ngo:
+            logger.info(f"Database already contains {total} projects. Ensuring NGO due diligence reports...")
+            for ngo in seeded_ngos:
                 try:
                     due_dil_service.get_latest_report(ngo.id)
                 except Exception:
@@ -96,24 +116,31 @@ def seed_demo_data_if_needed() -> None:
             return
 
         logger.info("Database is empty. Populating candidate demo projects and engine records...")
-        
-        # 1. Create or get primary NGO
-        ngo = ngo_repo.get_by_external_id("NGO-SEED-001")
-        if not ngo:
-            ngo = ngo_repo.create(
+
+        # Primary demo NGO
+        primary_ngo = ngo_repo.get_by_external_id("NGO-SEED-001")
+        if not primary_ngo:
+            primary_ngo = ngo_repo.create(
                 name="Pratham Development Foundation",
                 external_id="NGO-SEED-001",
                 registration_number="REG-ALLOCATEAI-SEED"
             )
             session.commit()
+        seeded_ngos.append(primary_ngo)
 
-        # Generate seed NGO due diligence report
-        due_dil_service.evaluate_ngo(ngo.id, engine=dd_engine, request_id="seed_dd_eval")
+        # Generate due diligence reports for all seeded NGOs
+        for ngo in seeded_ngos:
+            try:
+                due_dil_service.get_latest_report(ngo.id)
+            except Exception:
+                due_dil_service.evaluate_ngo(ngo.id, engine=dd_engine, request_id=f"seed_dd_{ngo.external_id}")
 
         # 2. Seed projects & generate Impact DNA vectors
         for idx, item in enumerate(DEMO_PROJECTS, start=1):
+            assigned_ngo = seeded_ngos[idx % len(seeded_ngos)]
+
             prop = prop_service.create_proposal(
-                ngo_id=ngo.id,
+                ngo_id=assigned_ngo.id,
                 title=f"Proposal for {item['name']}",
                 source_type="DIRECT_SUBMISSION",
                 request_id=f"req_seed_prop_{idx}"
@@ -121,7 +148,7 @@ def seed_demo_data_if_needed() -> None:
             session.commit()
 
             proj = proj_service.create_project(
-                ngo_id=ngo.id,
+                ngo_id=assigned_ngo.id,
                 name=item["name"],
                 sector=item["sector"],
                 duration_months=item["duration_months"],
@@ -141,4 +168,4 @@ def seed_demo_data_if_needed() -> None:
             # Generate Impact DNA vector
             impact_dna_service.generate_dna(proj.public_id, engine=dna_engine, request_id=f"req_seed_dna_{idx}")
 
-        logger.info(f"Successfully seeded {len(DEMO_PROJECTS)} candidate projects, Impact DNA vectors, and NGO Due Diligence into PostgreSQL.")
+        logger.info(f"Successfully seeded {len(seeded_ngos)} statutory NGOs, {len(DEMO_PROJECTS)} candidate projects, Impact DNA vectors, and NGO Due Diligence into PostgreSQL.")
