@@ -1,5 +1,6 @@
 import React from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, useQuery } from '@tanstack/react-query'
+import { apiClient } from '../../api/client'
 import type { OptimizationResult } from '../../types'
 import { formatPaise } from '../../utils/money'
 import { LayoutList } from 'lucide-react'
@@ -7,7 +8,47 @@ import { Link } from 'react-router-dom'
 
 export const Allocations: React.FC = () => {
     const queryClient = useQueryClient()
-    const result = queryClient.getQueryData<OptimizationResult>(['lastOptimizationRun'])
+    const cachedResult = queryClient.getQueryData<OptimizationResult>(['lastOptimizationRun'])
+
+    const { data: runs } = useQuery<any[]>({
+        queryKey: ['optimizationRuns'],
+        queryFn: () => apiClient.get<any[]>('/optimization/runs'),
+        enabled: !cachedResult,
+    })
+
+    const latestRunId = runs && runs.length > 0 ? runs[runs.length - 1].run_id : ''
+
+    const { data: fetchedRun } = useQuery<any>({
+        queryKey: ['optimizationRunDetail', latestRunId],
+        queryFn: () => apiClient.get<any>(`/optimization/runs/${latestRunId}`),
+        enabled: !cachedResult && Boolean(latestRunId),
+    })
+
+    const result: OptimizationResult | null = cachedResult || (fetchedRun ? {
+        run_id: fetchedRun.run_id,
+        status: fetchedRun.status,
+        budget_paise: fetchedRun.budget_paise,
+        allocated_paise: fetchedRun.result_snapshot?.allocated_paise || fetchedRun.budget_paise,
+        unallocated_paise: fetchedRun.result_snapshot?.unallocated_paise || 0,
+        total_predicted_impact: fetchedRun.total_predicted_impact || 0,
+        average_saturation: fetchedRun.result_snapshot?.average_saturation || 0,
+        underserved_region_allocation_share: fetchedRun.result_snapshot?.underserved_region_allocation_share || 0,
+        weights: fetchedRun.input_snapshot?.weights || { need: 0.3, marginal_impact: 0.3, cost_efficiency: 0.2, evidence: 0.1, scalability: 0.05, equity: 0.03, risk_penalty: 0.02 },
+        constraints: fetchedRun.input_snapshot?.constraints || { regional_equity_enabled: true },
+        calculation_versions: fetchedRun.result_snapshot?.calculation_versions || { solver: 'scipy-milp-v1' },
+        allocations: (fetchedRun.allocations || []).map((a: any) => ({
+            project_id: a.project_id,
+            state: a.state || 'India',
+            allocated_amount_paise: a.allocated_amount_paise,
+            marginal_impact_score: a.marginal_score,
+            base_score: a.base_score,
+            saturation_index: a.saturation_index,
+            rank: a.rank,
+            status: a.status,
+            reason_codes: a.reason_codes,
+        })),
+        created_at: fetchedRun.created_at || new Date().toISOString(),
+    } : null)
 
     if (!result) {
         return (
