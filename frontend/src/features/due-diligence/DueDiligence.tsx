@@ -1,16 +1,21 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { apiClient } from '../../api/client'
-import type { DueDiligenceReport, Project } from '../../types'
+import type { DueDiligenceReport, Project, NGO } from '../../types'
 import { Search, ShieldAlert, Shield, CheckCircle2, XCircle, Building2 } from 'lucide-react'
 
 export const DueDiligence: React.FC = () => {
+    const { data: ngos } = useQuery<NGO[]>({
+        queryKey: ['ngos'],
+        queryFn: () => apiClient.get<NGO[]>('/ngos'),
+    })
+
     const { data: projects } = useQuery<Project[]>({
         queryKey: ['projects'],
         queryFn: () => apiClient.get<Project[]>('/projects'),
     })
 
-    const firstNgoId = projects && projects.length > 0 ? projects[0].ngo_id : ""
+    const firstNgoId = ngos && ngos.length > 0 ? ngos[0].id : (projects && projects.length > 0 ? projects[0].ngo_id : "")
     const [searchId, setSearchId] = useState("")
     const [activeId, setActiveId] = useState("")
 
@@ -81,7 +86,7 @@ export const DueDiligence: React.FC = () => {
                     />
                 </div>
 
-                {projects && projects.length > 0 && (
+                {((ngos && ngos.length > 0) || (projects && projects.length > 0)) && (
                     <div className="flex items-center space-x-2">
                         <Building2 className="w-4 h-4 text-secondary shrink-0" />
                         <select
@@ -89,11 +94,17 @@ export const DueDiligence: React.FC = () => {
                             onChange={(e) => setActiveId(e.target.value)}
                             className="px-3 py-2.5 rounded border border-outline-variant bg-surface-container-low text-xs font-mono"
                         >
-                            {Array.from(new Set(projects.map(p => p.ngo_id))).map(ngoId => (
-                                <option key={ngoId} value={ngoId}>
-                                    Seeded NGO ({ngoId})
-                                </option>
-                            ))}
+                            {ngos && ngos.length > 0
+                                ? ngos.map(n => (
+                                    <option key={n.id} value={n.id}>
+                                        {n.name} ({n.registration_number || n.external_id || n.id})
+                                    </option>
+                                ))
+                                : Array.from(new Set((projects || []).map(p => p.ngo_id))).map(ngoId => (
+                                    <option key={ngoId} value={ngoId}>
+                                        Seeded NGO ({ngoId})
+                                    </option>
+                                ))}
                         </select>
                     </div>
                 )}

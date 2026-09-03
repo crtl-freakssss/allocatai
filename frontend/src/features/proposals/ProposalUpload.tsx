@@ -10,7 +10,7 @@ export const ProposalUpload: React.FC = () => {
     const queryClient = useQueryClient()
 
     const [title, setTitle] = useState('Rural Clean Water & Sanitation Drive')
-    const [organizationName, setOrganizationName] = useState('Global Hope Foundation')
+    const [organizationName, setOrganizationName] = useState('')
     const [selectedNgoId, setSelectedNgoId] = useState<string>('')
     const [file, setFile] = useState<File | null>(null)
     const [statusText, setStatusText] = useState('')
@@ -22,8 +22,9 @@ export const ProposalUpload: React.FC = () => {
         queryFn: () => apiClient.get<NGO[]>('/ngos'),
     })
 
-    // Resolve active NGO ID from list or selected state
+    // Derive active NGO ID and Organization Name cleanly without effect setState
     const activeNgoId = selectedNgoId || (ngos && ngos.length > 0 ? ngos[0].id : '')
+    const activeOrgName = organizationName || (ngos?.find(n => n.id === activeNgoId)?.name || '')
 
     const handleNgoChange = (ngoId: string) => {
         setSelectedNgoId(ngoId)
@@ -67,7 +68,7 @@ export const ProposalUpload: React.FC = () => {
             }
 
             if (!finalNgoId) {
-                throw new Error("No registered NGO found in PostgreSQL database.")
+                throw new Error("No registered NGO found in PostgreSQL database. Ensure backend seed data is loaded.")
             }
 
             if (!title.trim()) {
@@ -112,7 +113,7 @@ export const ProposalUpload: React.FC = () => {
             navigate(`/proposals/${proposal.proposal_id}`)
         },
         onError: (err: any) => {
-            // Preserve form state (title, selectedNgoId, organizationName, file remain intact)
+            // Keep title, selected NGO, file, and form state intact for retry
             setErrorMsg(err.message || 'Failed to upload proposal')
             setStatusText('')
         },
@@ -134,12 +135,21 @@ export const ProposalUpload: React.FC = () => {
             </div>
 
             {errorMsg && (
-                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center space-x-3 text-rose-700 text-xs">
-                    <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-                    <div>
-                        <p className="font-semibold">Upload Failure</p>
-                        <p>{errorMsg}</p>
+                <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-between text-rose-700 text-xs">
+                    <div className="flex items-center space-x-3">
+                        <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                        <div>
+                            <p className="font-semibold">Upload Failure</p>
+                            <p>{errorMsg}</p>
+                        </div>
                     </div>
+                    <button
+                        type="button"
+                        onClick={() => uploadMutation.mutate()}
+                        className="px-3 py-1.5 rounded bg-rose-600 text-white font-semibold hover:bg-rose-700 transition shrink-0"
+                    >
+                        Retry Upload
+                    </button>
                 </div>
             )}
 
@@ -160,17 +170,28 @@ export const ProposalUpload: React.FC = () => {
                     <div>
                         <label className="block font-label-md text-xs font-semibold text-on-surface-variant mb-1 flex items-center gap-1">
                             <Building2 className="w-3.5 h-3.5 text-secondary" />
-                            <span>Select Registered NGO Partner ({organizationName})</span>
+                            <span>Select Registered NGO Partner {activeOrgName ? `(${activeOrgName})` : ''}</span>
                         </label>
                         {ngosLoading ? (
                             <div className="p-2 text-xs text-on-surface-variant animate-pulse">Loading registered NGOs from PostgreSQL...</div>
+                        ) : !ngos || ngos.length === 0 ? (
+                            <div className="p-3 rounded bg-amber-500/10 border border-amber-500/30 text-amber-700 text-xs flex items-center justify-between">
+                                <span>No registered NGO found in PostgreSQL database. Ensure backend seed data is loaded.</span>
+                                <button
+                                    type="button"
+                                    onClick={() => queryClient.invalidateQueries({ queryKey: ['ngos'] })}
+                                    className="underline font-semibold"
+                                >
+                                    Reload NGOs
+                                </button>
+                            </div>
                         ) : (
                             <select
                                 value={activeNgoId}
                                 onChange={(e) => handleNgoChange(e.target.value)}
                                 className="w-full px-3 py-2.5 rounded border border-outline-variant/50 bg-surface-container-low text-xs font-mono text-on-surface focus:border-secondary focus:outline-none"
                             >
-                                {ngos?.map((ngo) => (
+                                {ngos.map((ngo) => (
                                     <option key={ngo.id} value={ngo.id}>
                                         {ngo.name} ({ngo.registration_number || ngo.external_id || ngo.id})
                                     </option>
