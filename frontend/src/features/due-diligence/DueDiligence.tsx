@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { apiClient } from '../../api/client'
 import type { DueDiligenceReport, Project } from '../../types'
-import { Search, ShieldAlert, Shield, CheckCircle2, XCircle } from 'lucide-react'
+import { Search, ShieldAlert, Shield, CheckCircle2, XCircle, Building2 } from 'lucide-react'
 
 export const DueDiligence: React.FC = () => {
     const { data: projects } = useQuery<Project[]>({
@@ -14,11 +14,21 @@ export const DueDiligence: React.FC = () => {
     const [searchId, setSearchId] = useState("")
     const [activeId, setActiveId] = useState("")
 
-    const currentNgoId = activeId || firstNgoId
+    const currentNgoId = activeId || searchId.trim() || firstNgoId
 
     const { data: report, isLoading, error } = useQuery<DueDiligenceReport>({
         queryKey: ['dueDiligence', currentNgoId],
-        queryFn: () => apiClient.get<DueDiligenceReport>(`/due-diligence/${currentNgoId}`),
+        queryFn: async () => {
+            try {
+                return await apiClient.get<DueDiligenceReport>(`/due-diligence/${currentNgoId}`)
+            } catch (err: any) {
+                // If report not found (404), auto-evaluate report via POST /evaluate
+                if (err.message?.includes('404') || err.message?.includes('not found') || err.code === 'RESOURCE_NOT_FOUND') {
+                    return await apiClient.post<DueDiligenceReport>(`/due-diligence/${currentNgoId}/evaluate`)
+                }
+                throw err
+            }
+        },
         enabled: Boolean(currentNgoId && currentNgoId.includes('-')),
     })
 
@@ -58,7 +68,7 @@ export const DueDiligence: React.FC = () => {
             </div>
 
             {/* Search / Select Bar */}
-            <div className="flex space-x-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest p-space-lg shadow-sm">
+            <div className="flex flex-col md:flex-row space-y-3 md:space-y-0 md:space-x-4 rounded-xl border border-outline-variant/50 bg-surface-container-lowest p-space-lg shadow-sm">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-on-surface-variant" />
                     <input
@@ -70,10 +80,28 @@ export const DueDiligence: React.FC = () => {
                         className="block w-full rounded border border-outline-variant bg-surface-container-low py-2.5 pl-10 pr-3 font-body-md text-sm text-on-surface focus:border-secondary focus:outline-none font-mono"
                     />
                 </div>
+
+                {projects && projects.length > 0 && (
+                    <div className="flex items-center space-x-2">
+                        <Building2 className="w-4 h-4 text-secondary shrink-0" />
+                        <select
+                            value={currentNgoId}
+                            onChange={(e) => setActiveId(e.target.value)}
+                            className="px-3 py-2.5 rounded border border-outline-variant bg-surface-container-low text-xs font-mono"
+                        >
+                            {Array.from(new Set(projects.map(p => p.ngo_id))).map(ngoId => (
+                                <option key={ngoId} value={ngoId}>
+                                    Seeded NGO ({ngoId})
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 <button
                     onClick={handleSearch}
                     disabled={evaluateMutation.isPending}
-                    className="flex items-center space-x-2 rounded bg-secondary px-6 py-2.5 font-label-md text-sm font-semibold text-on-secondary shadow-sm hover:bg-on-secondary-container transition"
+                    className="flex items-center justify-center space-x-2 rounded bg-secondary px-6 py-2.5 font-label-md text-sm font-semibold text-on-secondary shadow-sm hover:bg-on-secondary-container transition"
                 >
                     <Search className="h-4 w-4" />
                     <span>{evaluateMutation.isPending ? 'Evaluating...' : 'Evaluate NGO'}</span>
@@ -90,7 +118,7 @@ export const DueDiligence: React.FC = () => {
                     <div className="p-12 text-center text-rose-600 font-body-md space-y-2">
                         <ShieldAlert className="w-8 h-8 mx-auto" />
                         <p className="font-bold">Due Diligence Report Unavailable</p>
-                        <p className="text-xs text-on-surface-variant">Click 'Evaluate NGO' above to trigger an automated statutory evaluation.</p>
+                        <p className="text-xs text-on-surface-variant">{(error as any)?.message || "Click 'Evaluate NGO' above to trigger an automated statutory evaluation."}</p>
                     </div>
                 )}
 

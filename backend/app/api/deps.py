@@ -8,11 +8,13 @@ from app.services import (
     DocumentService,
     ExtractionService,
     ProjectService,
+    ImpactDNAService,
     OptimizationService,
     ReallocationService,
     DueDiligenceService,
     AuditService,
     ExtractionEngine,
+    ImpactDNAEngine,
     OptimizationEngine,
     ReallocationEngine,
     DueDiligenceEngine,
@@ -50,6 +52,11 @@ def get_project_service(session: Session = Depends(get_db)) -> ProjectService:
     return ProjectService(session=session)
 
 
+def get_impact_dna_service(session: Session = Depends(get_db)) -> ImpactDNAService:
+    """Dependency providing ImpactDNAService instance."""
+    return ImpactDNAService(session=session)
+
+
 def get_optimization_service(session: Session = Depends(get_db)) -> OptimizationService:
     """Dependency providing OptimizationService instance."""
     return OptimizationService(session=session)
@@ -72,6 +79,7 @@ def get_audit_service(session: Session = Depends(get_db)) -> AuditService:
 
 from app.engine import (
     RealExtractionEngine,
+    RealImpactDNAEngine,
     RealOptimizationEngine,
     RealReallocationEngine,
     RealDueDiligenceEngine,
@@ -83,6 +91,11 @@ from app.engine import (
 def get_extraction_engine() -> ExtractionEngine:
     """Default production extraction engine provider."""
     return RealExtractionEngine()
+
+
+def get_impact_dna_engine() -> ImpactDNAEngine:
+    """Default production Impact DNA profiling engine provider."""
+    return RealImpactDNAEngine()
 
 
 def get_optimization_engine() -> OptimizationEngine:
@@ -98,4 +111,3 @@ def get_reallocation_engine() -> ReallocationEngine:
 def get_due_diligence_engine() -> DueDiligenceEngine:
     """Default production due diligence verification engine provider."""
     return RealDueDiligenceEngine()
-

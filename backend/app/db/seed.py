@@ -2,7 +2,13 @@ import logging
 from sqlalchemy import text
 from app.db.session import SessionLocal
 from app.repositories import NGORepository, ProjectRepository
-from app.services import ProposalService, ProjectService
+from app.services import (
+    ProposalService,
+    ProjectService,
+    ImpactDNAService,
+    DueDiligenceService,
+)
+from app.engine import RealImpactDNAEngine, RealDueDiligenceEngine
 from app.schemas.enums import ProjectSector
 
 logger = logging.getLogger("allocateai.seed")
@@ -65,20 +71,31 @@ DEMO_PROJECTS = [
 ]
 
 def seed_demo_data_if_needed() -> None:
-    """Populates candidate NGOs and Projects into PostgreSQL if database contains zero projects."""
+    """Populates candidate NGOs, Projects, ImpactDNA vectors, and DueDiligence reports into PostgreSQL."""
     with SessionLocal() as session:
         proj_repo = ProjectRepository(session)
         ngo_repo = NGORepository(session)
         prop_service = ProposalService(session)
         proj_service = ProjectService(session)
+        impact_dna_service = ImpactDNAService(session)
+        due_dil_service = DueDiligenceService(session)
+
+        dna_engine = RealImpactDNAEngine()
+        dd_engine = RealDueDiligenceEngine()
 
         # Check existing count
         existing_projects, total = proj_repo.list(page=1, page_size=1)
         if total > 0:
-            logger.info(f"Database already contains {total} projects. Skipping seed.")
+            logger.info(f"Database already contains {total} projects. Ensuring seed NGO due diligence report...")
+            ngo = ngo_repo.get_by_external_id("NGO-SEED-001")
+            if ngo:
+                try:
+                    due_dil_service.get_latest_report(ngo.id)
+                except Exception:
+                    due_dil_service.evaluate_ngo(ngo.id, engine=dd_engine, request_id="seed_dd_eval")
             return
 
-        logger.info("Database is empty. Populating candidate demo projects...")
+        logger.info("Database is empty. Populating candidate demo projects and engine records...")
         
         # 1. Create or get primary NGO
         ngo = ngo_repo.get_by_external_id("NGO-SEED-001")
@@ -90,7 +107,10 @@ def seed_demo_data_if_needed() -> None:
             )
             session.commit()
 
-        # 2. Seed projects
+        # Generate seed NGO due diligence report
+        due_dil_service.evaluate_ngo(ngo.id, engine=dd_engine, request_id="seed_dd_eval")
+
+        # 2. Seed projects & generate Impact DNA vectors
         for idx, item in enumerate(DEMO_PROJECTS, start=1):
             prop = prop_service.create_proposal(
                 ngo_id=ngo.id,
@@ -118,4 +138,7 @@ def seed_demo_data_if_needed() -> None:
             )
             session.commit()
 
-        logger.info(f"Successfully seeded {len(DEMO_PROJECTS)} candidate projects into PostgreSQL.")
+            # Generate Impact DNA vector
+            impact_dna_service.generate_dna(proj.public_id, engine=dna_engine, request_id=f"req_seed_dna_{idx}")
+
+        logger.info(f"Successfully seeded {len(DEMO_PROJECTS)} candidate projects, Impact DNA vectors, and NGO Due Diligence into PostgreSQL.")
