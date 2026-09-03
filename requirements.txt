@@ -1,0 +1,28 @@
+# ==============================================================================
+# AllocateAI Backend - Production Requirements
+# ==============================================================================
+
+# Core Web Application Framework & Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+
+# Configuration & Data Validation
+pydantic>=2.8.0
+pydantic-settings>=2.4.0
+python-dotenv>=1.0.0
+
+# Database ORM, PostgreSQL Driver & Schema Migrations
+sqlalchemy>=2.0.30
+psycopg[binary]>=3.1.18
+alembic>=1.13.0
+
+# Mathematical Optimization & Quantitative Decision Engine (SciPy MILP)
+scipy>=1.13.0
+numpy>=1.26.0
+
+# HTTP Client for LLM / OpenAI API Integration
+httpx>=0.27.0
+
+# Backend Integration & Automated Test Suite
+pytest>=8.0.0
