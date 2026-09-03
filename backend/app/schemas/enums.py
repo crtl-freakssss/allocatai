@@ -1,0 +1,116 @@
+from enum import Enum
+
+
+class ProjectSector(str, Enum):
+    """Sectors recognized for CSR project interventions."""
+
+    EDUCATION = "EDUCATION"
+    HEALTHCARE = "HEALTHCARE"
+    POVERTY_HUNGER = "POVERTY_HUNGER"
+    ENVIRONMENT = "ENVIRONMENT"
+    RURAL_DEVELOPMENT = "RURAL_DEVELOPMENT"
+    GENDER_EQUALITY = "GENDER_EQUALITY"
+    LIVELIHOOD = "LIVELIHOOD"
+    DISASTER_RELIEF = "DISASTER_RELIEF"
+    SPORTS = "SPORTS"
+    ART_CULTURE = "ART_CULTURE"
+    OTHER = "OTHER"
+
+
+class ProposalStatus(str, Enum):
+    """Lifecycle stages of an uploaded proposal."""
+
+    UPLOADED = "UPLOADED"
+    EXTRACTING = "EXTRACTING"
+    EXTRACTED = "EXTRACTED"
+    VALIDATION_REQUIRED = "VALIDATION_REQUIRED"
+    READY = "READY"
+    REJECTED = "REJECTED"
+    FAILED = "FAILED"
+
+
+class VerificationStatus(str, Enum):
+    """Evidence verification and document readiness status."""
+
+    VERIFIED = "VERIFIED"
+    PARTIALLY_VERIFIED = "PARTIALLY_VERIFIED"
+    UNVERIFIED = "UNVERIFIED"
+    MISSING = "MISSING"
+    FLAGGED = "FLAGGED"
+
+
+class ConfidenceLevel(str, Enum):
+    """Categorical confidence rating for extraction or assessments."""
+
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+    UNKNOWN = "UNKNOWN"
+
+
+class DueDiligenceRisk(str, Enum):
+    """Risk tier assessed for an NGO partner."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
+    UNKNOWN = "UNKNOWN"
+
+
+class OptimizationStatus(str, Enum):
+    """Lifecycle status of a portfolio optimization solver run."""
+
+    QUEUED = "QUEUED"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class AllocationStatus(str, Enum):
+    """Approval status of a project-level funding allocation."""
+
+    PROPOSED = "PROPOSED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    REALLOCATED = "REALLOCATED"
+
+
+class AuditEventType(str, Enum):
+    """Immutable audit trail event types."""
+
+    PROPOSAL_CREATED = "PROPOSAL_CREATED"
+    DOCUMENT_UPLOADED = "DOCUMENT_UPLOADED"
+    EXTRACTION_STARTED = "EXTRACTION_STARTED"
+    EXTRACTION_COMPLETED = "EXTRACTION_COMPLETED"
+    PROJECT_CREATED = "PROJECT_CREATED"
+    IMPACT_DNA_CREATED = "IMPACT_DNA_CREATED"
+    SATURATION_CALCULATED = "SATURATION_CALCULATED"
+    DUE_DILIGENCE_COMPLETED = "DUE_DILIGENCE_COMPLETED"
+    OPTIMIZATION_STARTED = "OPTIMIZATION_STARTED"
+    OPTIMIZATION_COMPLETED = "OPTIMIZATION_COMPLETED"
+    ALLOCATION_CREATED = "ALLOCATION_CREATED"
+    REALLOCATION_STARTED = "REALLOCATION_STARTED"
+    REALLOCATION_COMPLETED = "REALLOCATION_COMPLETED"
+    WEIGHTS_CHANGED = "WEIGHTS_CHANGED"
+    CONSTRAINTS_CHANGED = "CONSTRAINTS_CHANGED"
+    ERROR_OCCURRED = "ERROR_OCCURRED"
+
+
+class ReasonCode(str, Enum):
+    """Explanatory reason codes attached to optimization allocation decisions."""
+
+    HIGH_NEED = "HIGH_NEED"
+    LOW_SATURATION = "LOW_SATURATION"
+    HIGH_MARGINAL_IMPACT = "HIGH_MARGINAL_IMPACT"
+    HIGH_COST_EFFICIENCY = "HIGH_COST_EFFICIENCY"
+    STRONG_EVIDENCE = "STRONG_EVIDENCE"
+    HIGH_SCALABILITY = "HIGH_SCALABILITY"
+    HIGH_IMPLEMENTATION_RISK = "HIGH_IMPLEMENTATION_RISK"
+    LOW_EVIDENCE = "LOW_EVIDENCE"
+    HIGH_SATURATION = "HIGH_SATURATION"
+    BUDGET_CONSTRAINT = "BUDGET_CONSTRAINT"
+    REGIONAL_CAP = "REGIONAL_CAP"
+    MINIMUM_ALLOCATION = "MINIMUM_ALLOCATION"
+    MISSING_DATA = "MISSING_DATA"
+    DUE_DILIGENCE_FLAG = "DUE_DILIGENCE_FLAG"
