@@ -42,7 +42,7 @@ export const Dashboard: React.FC = () => {
                             <span>AllocateAI / CSR Decision Platform</span>
                         </div>
                         <h1 className="font-display text-display tracking-tight text-on-surface">
-                            Good morning, Admin
+                            Hello :)
                         </h1>
                         <p className="font-body-lg text-body-lg text-on-surface-variant">
                             See where your next ₹1 lakh can create the greatest additional impact.
