@@ -1,208 +1,1217 @@
-# AllocateAI — Backend Platform
+\# AllocatAI
 
-AllocateAI is an AI-driven resource allocation and portfolio optimization platform.
+### AI-Powered CSR Fund Allocation & Project Prioritization
 
-This repository houses the backend service built with **FastAPI**, **SQLAlchemy 2.0**, **Alembic**, and **PostgreSQL**.
+> **Find where the next rupee of CSR budget creates the most additional impact — not just which project scores highest.**
 
----
+AllocateAI is an intelligent CSR fund allocation platform designed to help CSR committees move from spreadsheet-based project evaluation to **data-driven, constraint-aware and explainable capital allocation**.
 
-## Project Status
-
-- **Phase 0 (Project Foundation)**: **COMPLETE & VERIFIED**
-- **Phase 1 (Database Architecture)**: **COMPLETE & VERIFIED**
-- **Phase 2 (Schemas & Validation Boundary)**: **COMPLETE & VERIFIED**
-- **Phase 3 (Repository / Data Access Layer)**: **COMPLETE & VERIFIED**
-- **Phase 4 (Services & Workflow Orchestration)**: **COMPLETE & VERIFIED**
-- **Phase 5 (API Endpoints & Integration)**: **COMPLETE & VERIFIED**
-- **Phase 6 (Intelligence Engine Integration)**: **COMPLETE & VERIFIED**
-- **Phase 7 (End-to-End Integration & Demo Hardening)**: **COMPLETE & VERIFIED**
+Instead of simply ranking NGO proposals, AllocateAI evaluates projects using **Impact DNA, project scoring, regional CSR saturation and marginal impact**, then uses a deterministic **Mixed-Integer Linear Programming (MILP)** optimizer to determine how a limited CSR budget should be distributed.
 
 ---
 
-## Phase 6 Intelligence Engine Architecture
+## Table of Contents
 
-Phase 6 implements the concrete mathematical, AI, and algorithmic engines under `backend/app/engine/`:
-- **AI / Document Extraction (`RealExtractionEngine`)**: Structured fact and unverified evidence item extraction (`gemini-1.5-pro-structured` / `extraction-v1.0`) with deterministic offline zero-secret fallback.
-- **Impact DNA (`RealImpactDNAEngine`)**: Multidimensional impact dimension generation across need, expected impact, cost efficiency, evidence strength, scalability, and implementation risk (`impact-dna-v1`).
-- **Deterministic Scoring (`ScoringEngine`)**: Normalized multi-attribute utility calculation weighted by contract-defined `OptimizationWeights` (`scoring-v1`).
-- **CSR Saturation Index (`RealSaturationEngine`)**: Regional saturation ratio combining existing CSR disbursements against benchmark capacity and demographic need (`sat-v1`).
-- **Marginal Impact (`MarginalImpactCalculator`)**: Diminishing utility modeling over incremental capital tranches ($\Delta \text{Impact} / \Delta \text{Budget}$, `marginal-v1`).
-- **MILP Portfolio Optimizer (`RealOptimizationEngine`)**: Mixed Integer Linear Programming solver (`scipy.optimize.milp` / `scipy-milp-v1`) guaranteeing strict integer paise conservation ($allocated + unallocated = budget$), project caps, regional caps, regional equity distribution, and explainability reason codes.
-- **Dynamic Reallocation (`RealReallocationEngine`)**: Milestone velocity evaluation redirecting capital from lagging to high-performing projects while keeping historical runs immutable (`realloc-v1`).
-- **Due Diligence (`RealDueDiligenceEngine`)**: Statutory compliance auditing (12A/80G, Darpan, FCRA) preserving mandatory legal non-certification disclaimers (`due-diligence-v1`).
-
----
-
-## Phase 5 API Endpoint Layer
-
-Phase 5 exposes all backend workflows under `/api/v1` using FastAPI:
-- `POST /api/v1/proposals`: Ingest new proposal, validate NGO existence, return sequential `PRO-xxxx`.
-- `GET  /api/v1/proposals`: Paginated list of proposals with NGO and status filters.
-- `GET  /api/v1/proposals/{id}`: Detailed proposal state lookup by public ID.
-- `POST /api/v1/proposals/{id}/documents`: Attach proposal document metadata and SHA-256 fingerprint (`DOC-xxxx`), rejecting duplicates.
-- `GET  /api/v1/proposals/{id}/documents`: List attached documents for a proposal.
-- `POST /api/v1/proposals/{id}/extract`: Trigger AI extraction on attached document, assign official `PRJ-xxxx`, and advance proposal status.
-- `POST /api/v1/projects`: Create CSR project with geographic scope and integer paise financials.
-- `GET  /api/v1/projects`: Paginated list of projects with sector and NGO filters.
-- `GET  /api/v1/projects/{id}`: Fetch project details by public ID.
-- `POST /api/v1/optimization/runs`: Trigger MILP portfolio optimization run with conservation invariant checks.
-- `GET  /api/v1/optimization/runs/{id}`: Retrieve optimization results, input snapshots, and allocation items.
-- `GET  /api/v1/optimization/runs`: List historical optimization solver runs.
-- `POST /api/v1/reallocation/runs`: Execute mid-cycle reallocation adjustments based on project performance updates.
-- `GET  /api/v1/reallocation/runs/{id}`: Retrieve reallocation run snapshot details.
-- `POST /api/v1/due-diligence/{ngo_id}/evaluate`: Evaluate NGO regulatory compliance markers (`DD-xxxx`).
-- `GET  /api/v1/due-diligence/{ngo_id}`: Retrieve latest compliance report with legal non-certification disclaimer.
-- `GET  /api/v1/audit/events`: Paginated query of immutable audit events with actor and request ID filters.
-- `GET  /api/v1/audit/events/{id}`: Fetch individual audit record by public identifier.
+- [Overview](#overview)
+- [Problem](#problem)
+- [Solution](#solution)
+- [Key Differentiators](#key-differentiators)
+- [How AllocateAI Works](#how-allocateai-works)
+- [System Architecture](#system-architecture)
+- [Repository Structure](#repository-structure)
+- [Technology Stack](#technology-stack)
+- [Core Modules](#core-modules)
+- [AI Pipeline](#ai-pipeline)
+- [Scoring Engine](#scoring-engine)
+- [CSR Saturation Engine](#csr-saturation-engine)
+- [Marginal Impact Engine](#marginal-impact-engine)
+- [MILP Optimization](#milp-optimization)
+- [Reallocation Engine](#reallocation-engine)
+- [Due Diligence](#due-diligence)
+- [Auditability](#auditability)
+- [Data & Financial Integrity](#data--financial-integrity)
+- [API Overview](#api-overview)
+- [Installation](#installation)
+- [Running the Application](#running-the-application)
+- [End-to-End Workflow](#end-to-end-workflow)
+- [Testing](#testing)
+- [Security](#security)
+- [Design Principles](#design-principles)
+- [Current Validation](#current-validation)
+- [Limitations](#limitations)
+- [Future Roadmap](#future-roadmap)
+- [Team Architecture](#team-architecture)
+- [Project Status](#project-status)
+- [License](#license)
 
 ---
 
-## Phase 4 Service / Orchestration Architecture
+# Overview
 
-Phase 4 implements business workflow orchestration under `backend/app/services/`:
-- **Transaction Ownership**: Services own transaction boundaries (`session.commit()`, `session.rollback()`). Repositories flush, but never commit.
-- **Engine Protocol Abstraction**: Mathematical solvers and AI components (`ExtractionEngine`, `ImpactDNAEngine`, `SaturationEngine`, `OptimizationEngine`, `ReallocationEngine`, `DueDiligenceEngine`) are defined as pure Python Protocols. Services orchestrate and validate results without coupling to specific LLMs or optimization solvers.
-- **Authoritative Identity**: Official persistent IDs (`PRO-xxxx`, `DOC-xxxx`, `PRJ-xxxx`, `DNA-xxxx`, `OPT-xxxx`, `REA-xxxx`, `DD-xxxx`, `AUD-xxxx`) are strictly generated and governed by backend services. Any client or engine-suggested identifiers are overridden.
-- **Conservation & Invariants**: Full enforcement of the budget conservation invariant ($allocated + unallocated = budget$).
-- **Audit Trails**: Every state mutation triggers an append-only audit event in the transactional write.
-- **Exception Normalization**: Domain-specific service exceptions (`ResourceNotFoundError`, `ResourceAlreadyExistsError`, `ServiceValidationError`, `ConflictError`, `InvalidStateTransitionError`, `ProcessingError`) shield callers from raw database exceptions.
+CSR committees frequently evaluate multiple projects competing for a limited annual CSR budget.
 
----
+Traditional workflow:
 
-## Phase 3 Repository Architecture
-
-Phase 3 implements the data access layer across all 14 entities under `backend/app/repositories/`.
-
-### Repository Principles:
-- **Transaction Ownership**: Repositories accept an active SQLAlchemy `Session`, invoking `flush()` and `refresh()` as needed, but never call `commit()` or `close()`. Transactions are owned and committed by callers (services).
-- **Immutability Protection**: `OptimizationRepository` prevents any modification of `input_snapshot`, `result_snapshot`, weights, or calculation metadata once a run transitions to `COMPLETED`.
-- **Append-Only Auditing**: `AuditRepository` provides `create()` and `bulk_create()` but strictly prohibits updates and deletes.
-- **Deterministic Pagination**: All paginated queries sort by `created_at DESC, id ASC` to guarantee stable ordering.
-- **Public ID Lookups**: Repositories support fast lookups by indexed `public_id` strings (e.g. `PRO-0001`, `PRJ-0001`, `OPT-0001`) separate from internal UUIDs.
-- **Relational Integrity**: Projects referenced by allocations cannot be hard-deleted, strictly respecting PostgreSQL `RESTRICT` constraints.
-
-## Phase 1 Database Architecture
-
-Phase 1 establishes the complete PostgreSQL database foundation strictly adhering to the AllocateAI Technical Contract.
-
-### Key Database Rules Enforced:
-1. **Migrations**: Managed via Alembic; all schema evolutions are version-controlled and reversible.
-2. **Primary Keys**: Internal database IDs use standard `UUID` (`uuid4`).
-3. **Public Identifiers**: API-facing entities have unique string `public_id` values generated backend-side with standard entity prefixes (e.g. `PRO-0001`, `PRJ-0001`, `NGO-0001`, `OPT-0001`, `DOC-0001`, `DNA-0001`, `DDR-0001`, `REA-0001`, `AUD-0001`).
-4. **Monetary Precision**: All monetary values (`requested_amount`, `current_funding`, `budget_paise`, `allocated_amount`, `existing_csr_amount`) are stored as `BIGINT` in **paise** (1 Rupee = 100 paise). Float and Numeric are forbidden for monetary columns.
-5. **Score Precision**: All statistical and AI scores use `NUMERIC` with exact scale and precision (e.g. `NUMERIC(6,5)` for normalized [0, 1] indices; `NUMERIC(14,4)` and `NUMERIC(18,4)` for predicted impact metrics).
-6. **Snapshots & Evidence**: Structured evidence and calculation configurations are stored in PostgreSQL `JSONB` columns (`input_snapshot`, `result_snapshot`, `weights`, `constraints`, `calculation_versions`, `checks`, `flags`, `reason_codes`, `payload`).
-7. **Snapshot Immutability**: `OptimizationRun` snapshots are immutable upon completion.
-8. **Append-Only Audit**: `AuditEvent` records are immutable and append-only.
-9. **Deletion Safeguards**: Projects referenced by `allocations` cannot be hard-deleted (`ondelete="RESTRICT"`).
-10. **Timestamps**: Consistent timezone-aware timestamps (`created_at` with server default `now()`, `updated_at` with auto-update trigger/hook).
-
-### Database Tables Implemented (14 Tables)
-
-| # | Table Name | Description | Key Constraints & Types |
-| :--- | :--- | :--- | :--- |
-| 1 | `organizations` | Corporate donors and foundations | UUID PK, `name` |
-| 2 | `users` | User accounts associated with organizations | UUID PK, `organization_id` FK, `email` (unique) |
-| 3 | `ngos` | Non-governmental implementing partners | UUID PK, `external_id` (unique), `name`, `registration_number` |
-| 4 | `proposals` | Project proposals submitted by NGOs | UUID PK, `public_id` (unique), `ngo_id` FK, `status`, `source_type` |
-| 5 | `documents` | Proposal verification files and attachments | UUID PK, `public_id` (unique), `proposal_id` FK, `file_size_bytes` (BIGINT), `sha256` |
-| 6 | `projects` | Distinct CSR interventions | UUID PK, `public_id` (unique), `ngo_id` FK, `proposal_id` FK, `requested_amount` (BIGINT paise), `current_funding` (BIGINT paise) |
-| 7 | `project_geographies` | Target states, districts, and blocks | UUID PK, `project_id` FK, `state`, `district`, `block` |
-| 8 | `impact_dna` | Extracted & computed impact dimensions | UUID PK, `public_id` (unique), `project_id` FK (unique), `need_score` / `impact_score` / etc. (NUMERIC(6,5)), `missing_fields` (JSONB) |
-| 9 | `saturation_results` | Regional CSR funding saturation analytics | UUID PK, `project_id` FK, `saturation_index` (NUMERIC(6,5)), `existing_csr_amount` (BIGINT paise) |
-| 10 | `due_diligence_reports` | NGO risk evaluation & compliance checks | UUID PK, `public_id` (unique), `ngo_id` FK, `checks` (JSONB), `flags` (JSONB) |
-| 11 | `optimization_runs` | Portfolio optimization executions | UUID PK, `public_id` (unique), `budget_paise` (BIGINT paise), `input_snapshot` (JSONB), `result_snapshot` (JSONB), `total_predicted_impact` (NUMERIC(18,4)) |
-| 12 | `allocations` | Recommended project funding allocations | UUID PK, `optimization_run_id` FK, `project_id` FK (`RESTRICT`), `allocated_amount` (BIGINT paise), `marginal_score` (NUMERIC(6,5)), `reason_codes` (JSONB) |
-| 13 | `reallocation_runs` | Mid-cycle reallocation runs | UUID PK, `public_id` (unique), `previous_optimization_id` FK (`RESTRICT`), `budget_paise` (BIGINT paise), `performance_snapshot` (JSONB) |
-| 14 | `audit_events` | Append-only event trail | UUID PK, `public_id` (unique), `event_type`, `request_id`, `run_id`, `payload` (JSONB) |
-
-> **Note on `model_versions`**: As per Technical Contract instructions, `model_versions` is only referenced conceptually and has no defined schema in the contract; its implementation is deferred.
-
----
-
-## Architecture Overview
-
+```text
+NGO Proposals
+     ↓
+Spreadsheet
+     ↓
+Manual Scoring
+     ↓
+Committee Discussion
+     ↓
+Funding Decision
 ```
-React Frontend (Web Client)
-           ↓
-    FastAPI Router (/api/v1)
-           ↓
-     Service Layer [Phase 2+]
-           ↓
-    Repository Layer [Phase 2+]
-           ↓
-  SQLAlchemy 2.0 ORM Models
-           ↓
-  PostgreSQL (Relational Store)
+
+The highest-scoring project is not necessarily the project where the **next rupee of funding creates the greatest additional impact**.
+
+AllocateAI turns the process into:
+
+```text
+Proposal
+   ↓
+AI Extraction
+   ↓
+Impact DNA
+   ↓
+Project Scoring
+   ↓
+Regional Saturation
+   ↓
+Marginal Impact
+   ↓
+MILP Optimization
+   ↓
+Allocation
+   ↓
+Performance Monitoring
+   ↓
+Reallocation
+   ↓
+Audit Trail
 ```
 
 ---
+
+# Problem
+
+CSR committees face several challenges:
+
+### 1. Manual evaluation
+Large numbers of proposals are often compared using spreadsheets and subjective scoring.
+
+### 2. Ranking is not allocation
+Knowing which project is best does not answer:
+
+> How should ₹X crore actually be split across the portfolio?
+
+### 3. Regional concentration
+Funding can become concentrated in regions that already receive significant CSR support.
+
+### 4. Diminishing returns
+Additional funding to an already well-funded project may produce less additional impact than funding an underserved project.
+
+### 5. Limited explainability
+A final allocation needs to be defensible to internal stakeholders, auditors and decision-makers.
+
+---
+
+# Solution
+
+AllocateAI combines AI-assisted document understanding with deterministic optimization.
+
+The system:
+
+1. Accepts CSR project proposals.
+2. Extracts structured information from proposal documents.
+3. Generates project-level Impact DNA.
+4. Calculates normalized project scores.
+5. Measures regional CSR saturation.
+6. Estimates marginal impact.
+7. Optimizes allocation under budget and equity constraints.
+8. Stores optimization runs and allocation results.
+9. Supports performance-based reallocation.
+10. Maintains an append-only audit trail.
+
+---
+
+# Key Differentiators
+
+## 1. Marginal Impact Engine
+
+Most systems ask:
+
+> Which project is best?
+
+AllocateAI asks:
+
+> **Where does the next rupee create the most additional impact?**
+
+This enables funding decisions based on incremental impact rather than only absolute project scores.
+
+## 2. CSR Saturation Index
+
+AllocateAI considers how much CSR funding is already concentrated within a region.
+
+```text
+Regional CSR Funding
+        +
+Regional Benchmark
+        ↓
+Saturation Index
+        ↓
+Additional-impact adjustment
+```
+
+## 3. AI Impact DNA
+
+Proposal documents are transformed into structured project characteristics.
+
+```text
+PDF
+ ↓
+Extraction
+ ↓
+Structured Project Data
+ ↓
+Impact DNA
+```
+
+## 4. Deterministic Allocation
+
+The LLM is **not the final decision-maker**.
+
+```text
+AI
+ ↓
+Understand proposals
+```
+
+is separated from:
+
+```text
+Mathematical Engine
+ ↓
+Make allocation decisions
+```
+
+This makes allocation more reproducible and auditable.
+
+## 5. Closed-Loop Allocation
+
+```text
+Initial Allocation
+       ↓
+Project Performance
+       ↓
+Performance Velocity
+       ↓
+Reallocation
+       ↓
+Updated Portfolio
+```
+
+---
+
+# How AllocateAI Works
+
+```text
+                  ┌─────────────────┐
+                  │  CSR Committee  │
+                  └────────┬────────┘
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │ React Frontend  │
+                  └────────┬────────┘
+                           │
+                           ▼
+                  ┌─────────────────┐
+                  │   FastAPI API   │
+                  └────────┬────────┘
+                           │
+             ┌─────────────┴─────────────┐
+             │                           │
+             ▼                           ▼
+      ┌──────────────┐          ┌────────────────┐
+      │  AI Pipeline │          │ Decision Engine│
+      └──────┬───────┘          └───────┬────────┘
+             │                          │
+             ▼                          ▼
+      Impact DNA                   Scoring
+      Extraction                   Saturation
+      Evidence                     Marginal Impact
+      Due Diligence                MILP Optimization
+             │                          │
+             └────────────┬─────────────┘
+                          ▼
+                  ┌───────────────┐
+                  │  PostgreSQL   │
+                  └───────┬───────┘
+                          │
+                          ▼
+                  ┌───────────────┐
+                  │ Audit / Trace │
+                  └───────────────┘
+```
+
+---
+
+# System Architecture
+
+```text
+Frontend
+   ↓
+REST API
+   ↓
+Services
+   ↓
+AI / Decision Engines
+   ↓
+Repositories
+   ↓
+PostgreSQL
+```
+
+### Frontend
+Responsible for user interaction, dashboards, forms, visualizations, optimization controls, API state and loading/error states.
+
+### Backend
+Responsible for business logic, validation, orchestration, persistence, AI integration, optimization and auditability.
+
+### AI Layer
+Responsible for document extraction, structured interpretation, Impact DNA and evidence extraction.
+
+### Decision Engine
+Responsible for scoring, saturation, marginal impact, MILP optimization and reallocation.
+
+### Database
+Responsible for persistent state, relationships, financial values, optimization snapshots and audit records.
+
+---
+
+# Repository Structure
+
+```text
+AllocateAI/
+│
+├── frontend/
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── main.tsx
+│       ├── App.tsx
+│       ├── index.css
+│       ├── api/
+│       │   └── client.ts
+│       ├── types/
+│       │   └── index.ts
+│       ├── utils/
+│       │   └── money.ts
+│       ├── router/
+│       │   └── index.tsx
+│       ├── components/
+│       │   ├── Navbar.tsx
+│       │   ├── Sidebar.tsx
+│       │   ├── StatCard.tsx
+│       │   ├── ImpactDnaRadar.tsx
+│       │   ├── AllocationTable.tsx
+│       │   └── AuditTimeline.tsx
+│       └── pages/
+│           ├── DashboardPage.tsx
+│           ├── ProposalsPage.tsx
+│           ├── ProjectsPage.tsx
+│           ├── OptimizationPage.tsx
+│           ├── ReallocationPage.tsx
+│           ├── SaturationPage.tsx
+│           ├── DueDiligencePage.tsx
+│           └── AuditPage.tsx
+│
+├── backend/
+│   ├── ...
+│   ├── API routers
+│   ├── services
+│   ├── repositories
+│   ├── schemas
+│   ├── database models
+│   ├── AI pipeline
+│   ├── optimization engines
+│   └── tests
+│
+├── alembic/
+│   ├── env.py
+│   └── versions/
+│
+├── docs/
+├── uploads/
+├── docker-compose.yml
+├── .gitignore
+└── README.md
+```
+
+> The repository filesystem is the authoritative source for the exact current file tree.
+
+---
+
+# Technology Stack
+
+## Frontend
+
+| Technology | Purpose |
+|---|---|
+| React 19 | UI framework |
+| TypeScript | Type safety |
+| Vite | Build tooling |
+| React Router 7 | Routing |
+| React Query 5 | Server state |
+| Tailwind CSS 4 | Styling |
+| Recharts | Visualization |
+
+## Backend
+
+| Technology | Purpose |
+|---|---|
+| Python | Backend language |
+| FastAPI | REST API |
+| Pydantic | Validation/contracts |
+| SQLAlchemy | Database access |
+| Alembic | Database migrations |
+| PostgreSQL | Persistent storage |
+
+## AI
+
+- PDF processing
+- structured extraction
+- LLM integration
+- Impact DNA generation
+- evidence extraction
+- deterministic offline fallback
+
+## Optimization
+
+- SciPy
+- Mixed-Integer Linear Programming
+- piecewise-linear marginal utility
+- saturation-based decay
+
+---
+
+# Core Modules
+
+## Proposal Management
+
+Handles:
+
+- proposal creation
+- proposal retrieval
+- proposal validation
+- proposal-to-project lifecycle
+
+## Document Management
+
+Handles:
+
+- PDF upload
+- file validation
+- file storage
+- SHA-256 fingerprinting
+- extraction
+
+---
+
+# AI Pipeline
+
+```text
+Document
+   ↓
+Text Extraction
+   ↓
+AI Extraction
+   ↓
+Canonical Schema
+```
+
+The canonical backend schemas remain authoritative.
+
+The system supports an offline deterministic fallback when live LLM access is unavailable.
+
+---
+
+# Scoring Engine
+
+Project attributes are transformed into normalized scores.
+
+Scores are represented internally on:
+
+```text
+0.0 → 1.0
+```
+
+For example:
+
+```text
+0.84
+```
+
+can be displayed as:
+
+```text
+84%
+```
+
+The frontend does not independently recalculate authoritative scores.
+
+---
+
+# CSR Saturation Engine
+
+The saturation layer evaluates regional funding concentration.
+
+```text
+Regional Funding
+       +
+Benchmark
+       ↓
+Saturation
+       ↓
+Marginal-impact adjustment
+```
+
+The current implementation uses the `sat-v1` calculation version.
+
+---
+
+# Marginal Impact Engine
+
+The implementation uses:
+
+- saturation-based decay
+- diminishing marginal utility
+- discrete funding tranches
+- piecewise-linear concave utility
+
+Conceptually:
+
+```text
+Funding
+   │
+   ▼
+Marginal Impact
+   │
+   ├── Tranche 1 → high impact
+   ├── Tranche 2 → lower impact
+   └── Tranche 3 → lower impact
+```
+
+---
+
+# MILP Optimization
+
+Canonical path:
+
+```text
+OptimizationService
+        ↓
+RealOptimizationEngine
+        ↓
+MILPOptimizerFormulation
+        ↓
+SciPy MILP
+        ↓
+Optimization Result
+```
+
+The optimizer considers:
+
+- total CSR budget
+- project-level allocation caps
+- regional constraints
+- underserved-region allocation floor
+- optimization weights
+- marginal impact
+- saturation
+
+### Financial constraint
+
+```text
+Allocated + Unallocated = Total Budget
+```
+
+Allocations must be non-negative and satisfy configured project and regional constraints.
+
+---
+
+# Reallocation Engine
+
+```text
+Original Allocation
+       ↓
+Performance Information
+       ↓
+Performance Velocity
+       ↓
+Reallocation Optimization
+       ↓
+Updated Allocation
+```
+
+---
+
+# Due Diligence
+
+AllocateAI provides structured due-diligence information for projects and organizations.
+
+> AllocateAI's due-diligence functionality is **not legal certification or government verification**.
+
+---
+
+# Auditability
+
+Important system events are recorded in an append-only audit trail.
+
+```text
+Proposal Created
+      ↓
+Document Uploaded
+      ↓
+Extraction Completed
+      ↓
+Project Created
+      ↓
+Optimization Run
+      ↓
+Allocation Generated
+      ↓
+Reallocation
+```
+
+Optimization runs retain relevant calculation/configuration information so decisions can be traced.
+
+---
+
+# Data & Financial Integrity
+
+AllocateAI uses integer paise for monetary persistence and API values.
+
+```text
+₹1 = 100 paise
+```
+
+Example:
+
+```text
+₹10,000
+=
+1,000,000 paise
+```
+
+Money is represented internally using integers rather than floating-point arithmetic.
+
+---
+
+# Public IDs
+
+Official identifiers are generated by the backend.
+
+```text
+PRO-xxxx   Proposal
+DOC-xxxx   Document
+PRJ-xxxx   Project
+OPT-xxxx   Optimization Run
+REA-xxxx   Reallocation Run
+```
+
+The frontend does not generate authoritative IDs.
+
+---
+
+# API Overview
+
+API version:
+
+```text
+/api/v1
+```
+
+Representative endpoints:
+
+```http
+POST /api/v1/proposals
+POST /api/v1/proposals/{proposal_id}/documents
+POST /api/v1/proposals/{proposal_id}/extract
+POST /api/v1/optimization/runs
+GET  /api/v1/optimization/runs/{run_id}
+POST /api/v1/reallocation/runs
+```
+
+The backend API contracts and Pydantic schemas are authoritative.
+
+## Response envelope
+
+```json
+{
+  "data": {},
+  "meta": {
+    "request_id": "...",
+    "schema_version": "...",
+    "timestamp": "..."
+  }
+}
+```
+
+## Error envelope
+
+```json
+{
+  "error": {
+    "code": "...",
+    "message": "...",
+    "details": {},
+    "request_id": "..."
+  }
+}
+```
+
+---
+
+# Installation
 
 ## Requirements
 
-- **Python**: 3.10 or higher
-- **PostgreSQL**: 15+ (or Docker / Docker Compose)
-
----
-
-## Configuration & Environment Setup
-
-Copy `.env.example` to `.env`:
-
-```bash
-cp .env.example .env
+```text
+Python 3.10+
+Node.js
+npm
+PostgreSQL 18
+Git
 ```
 
-Ensure `DATABASE_URL` points to your active PostgreSQL instance:
-```env
-DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/allocateai
-```
-
----
-
-## Running Database Migrations (Alembic)
-
-To apply all schema migrations up to head:
+## Clone
 
 ```bash
-# From backend directory
+git clone https://github.com/crtl-freakssss/csr-.git
+cd csr-
+```
+
+## Backend
+
+### Windows
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+Install dependencies from the repository's backend dependency configuration.
+
+Development validation used:
+
+```text
+Host: localhost
+Port: 5433
+Database: allocateai
+```
+
+Run migrations:
+
+```bash
 python -m alembic upgrade head
 ```
 
-To rollback migrations:
+Check migration:
 
 ```bash
-# Rollback one revision
-python -m alembic downgrade -1
+python -m alembic current
+```
 
-# Rollback to base
-python -m alembic downgrade base
+## Frontend
+
+```bash
+cd frontend
+npm install
+```
+
+Configure:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
 ---
 
-## Running the Backend
+# Running the Application
 
-From the `backend/` directory:
+Start the FastAPI backend on:
 
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```text
+http://localhost:8000
 ```
 
-- **Health Probe**: `GET http://localhost:8000/api/v1/health`
-- **Readiness Probe**: `GET http://localhost:8000/api/v1/health/ready`
-- **Swagger Documentation**: `GET http://localhost:8000/docs`
+API documentation:
+
+```text
+http://localhost:8000/docs
+```
+
+Start the frontend:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Frontend:
+
+```text
+http://localhost:5173
+```
 
 ---
 
-## Running Tests
+# End-to-End Workflow
 
-Run the complete test suite (Phase 0 + Phase 1):
+```text
+1. Dashboard
+        ↓
+2. Create Proposal
+        ↓
+3. Upload PDF
+        ↓
+4. Extract Proposal
+        ↓
+5. Generate Project / Impact DNA
+        ↓
+6. Inspect Project
+        ↓
+7. Inspect Regional Saturation
+        ↓
+8. Configure Optimization
+        ↓
+9. Execute MILP Optimization
+        ↓
+10. Review Allocations
+        ↓
+11. Explain Decision
+        ↓
+12. Run Reallocation
+        ↓
+13. Review Due Diligence
+        ↓
+14. Review Audit Trail
+```
+
+---
+
+# Testing
+
+## Frontend build
 
 ```bash
-# From project root
+cd frontend
+npm run build
+```
+
+## Frontend lint
+
+```bash
+npm run lint
+```
+
+## Backend tests
+
+```bash
 python -m pytest backend/tests -v
-
-# Or from backend directory
-python -m pytest tests -v
 ```
+
+## Backend compilation
+
+```bash
+python -m compileall backend
+```
+
+## Alembic
+
+```bash
+python -m alembic current
+```
+
+---
+
+# Current Validation
+
+Backend regression validation:
+
+```text
+138 passed
+0 failed
+0 skipped
+0 errors
+```
+
+Frontend:
+
+```text
+Build: PASS
+Lint: PASS
+```
+
+Backend compilation:
+
+```text
+PASS
+```
+
+Alembic validation during final verification:
+
+```text
+53b46285e442
+```
+
+---
+
+# Security
+
+The application includes:
+
+- environment-based configuration
+- no committed API secrets
+- file type validation
+- file size validation
+- SHA-256 file fingerprinting
+- path traversal protection
+- structured error responses
+- Pydantic validation
+- database foreign-key enforcement
+- controlled CORS configuration
+
+---
+
+# Design Principles
+
+### Backend is the source of truth
+
+The frontend does not independently reproduce business logic.
+
+### AI does not directly control allocation
+
+AI extracts and interprets information. Mathematical engines make allocation decisions.
+
+### Financial values are integers
+
+Money is represented in paise.
+
+### IDs are backend-owned
+
+Official IDs are generated by the backend.
+
+### Optimization is reproducible
+
+Given equivalent inputs, constraints and calculation versions, the deterministic optimization pipeline produces reproducible results.
+
+### Auditability by design
+
+Important actions and optimization decisions are traceable.
+
+---
+
+# Current Scope
+
+Included:
+
+- CSR proposal ingestion
+- PDF upload
+- AI-assisted extraction
+- Impact DNA
+- Project scoring
+- Regional saturation
+- Marginal impact
+- Budget optimization
+- MILP allocation
+- Regional equity constraints
+- Reallocation
+- Due diligence information
+- Audit trail
+- React dashboard
+- PostgreSQL persistence
+
+---
+
+# Out of Scope
+
+The current implementation does not attempt to provide:
+
+- government-certified NGO verification
+- actual CSR fund disbursement
+- payment processing
+- live government need-index integration
+- automatic legal certification
+- BRSR/CSR-2 report generation
+- fully autonomous CSR decision-making
+
+---
+
+# Limitations
+
+The current system is a hackathon/prototype decision-support platform.
+
+Production deployment would require:
+
+- validated real-world CSR datasets
+- live government datasets
+- comprehensive NGO verification
+- larger-scale optimization benchmarking
+- formal model validation
+- security penetration testing
+- enterprise authentication and authorization
+- production infrastructure
+- monitoring and observability
+- real CSR committee feedback
+
+---
+
+# Future Roadmap
+
+## Phase 1 — Data Expansion
+
+- Census data
+- NFHS datasets
+- district-level development indicators
+- additional CSR funding datasets
+
+## Phase 2 — NGO Due Diligence
+
+- NGO verification
+- historical project performance
+- statutory information
+- financial indicators
+- evidence quality
+
+## Phase 3 — Enterprise Deployment
+
+- authentication
+- role-based access control
+- organization workspaces
+- approval workflows
+- multi-user collaboration
+- enterprise audit controls
+
+## Phase 4 — Continuous Impact Monitoring
+
+```text
+Funded Project
+      ↓
+Actual Outcomes
+      ↓
+Impact Measurement
+      ↓
+Model Feedback
+      ↓
+Future Allocation
+```
+
+---
+
+# Team Architecture
+
+### Member A — Frontend / Product UX
+
+- React interface
+- dashboards
+- user workflows
+- visualizations
+- frontend UX
+
+### Member B — AI / Data Pipeline
+
+- PDF extraction
+- AI integration
+- Impact DNA
+- evidence processing
+
+### Member C — Quant / Optimization
+
+- scoring
+- saturation
+- marginal impact
+- MILP formulation
+- reallocation logic
+
+### Member D — Backend / Platform
+
+- FastAPI
+- PostgreSQL
+- repositories
+- services
+- API integration
+- persistence
+- audit
+- frontend/backend integration
+
+---
+
+# Development Phases
+
+```text
+Phase 0
+Backend foundation
+
+Phase 1
+Database architecture
+
+Phase 2
+Schemas / contracts
+
+Phase 3
+Repositories
+
+Phase 4
+Services
+
+Phase 5
+REST API
+
+Phase 6
+AI + scoring + optimization
+
+Phase 7
+E2E backend hardening
+
+Phase 8–13
+Backend verification / production hardening
+
+Phase 14
+Frontend ↔ Backend integration
+
+Phase 15
+Production-readiness audit
+```
+
+---
+
+# Project Status
+
+```text
+┌─────────────────────────────────────┐
+│         ALLOCATEAI STATUS           │
+├─────────────────────────────────────┤
+│ Frontend Build          PASS        │
+│ Frontend Lint           PASS        │
+│ Backend Tests           138 PASS    │
+│ Backend Compilation     PASS        │
+│ Database Migrations     PASS        │
+│ API Integration         COMPLETE*   │
+│ E2E Validation          COMPLETE*   │
+└─────────────────────────────────────┘
+```
+
+`*` Final production-readiness status should be interpreted together with the latest Phase 15/15.1 verification report and actual browser verification.
+
+---
+
+# Demo
+
+Frontend:
+
+```text
+http://localhost:5173
+```
+
+Backend:
+
+```text
+http://localhost:8000
+```
+
+API Documentation:
+
+```text
+http://localhost:8000/docs
+```
+
+Recommended demo:
+
+```text
+Dashboard
+   ↓
+Create Proposal
+   ↓
+Upload CSR PDF
+   ↓
+AI Extraction
+   ↓
+Impact DNA
+   ↓
+Saturation
+   ↓
+MILP Optimization
+   ↓
+Allocation
+   ↓
+Reallocation
+   ↓
+Audit
+```
+
+---
+
+# Core Pitch
+
+> **AllocateAI doesn't just tell CSR committees which project is best. It determines how to distribute a limited CSR budget so that the next rupee produces the greatest additional impact, while accounting for project constraints, regional saturation and marginal returns.**
+
+---
+
+# Final Architecture
+
+```text
+                         ALLOCATEAI
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ REACT FRONTEND  │
+                    └────────┬────────┘
+                             │
+                         REST API
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │     FASTAPI     │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+       ┌──────────────┐             ┌─────────────────┐
+       │ AI PIPELINE  │             │ DECISION ENGINE │
+       │              │             │                 │
+       │ Extraction   │             │ Scoring         │
+       │ Impact DNA   │             │ Saturation      │
+       │ Evidence     │             │ Marginal Impact │
+       │ Due Diligence│             │ MILP            │
+       └──────┬───────┘             │ Reallocation    │
+              │                     └────────┬────────┘
+              │                              │
+              └──────────────┬───────────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │  REPOSITORIES   │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │  POSTGRESQL 18  │
+                    └────────┬────────┘
+                             ▼
+                    ┌─────────────────┐
+                    │ AUDIT / TRACE   │
+                    └─────────────────┘
+```
+
+**Upload → Extract → Understand → Score → Measure Saturation → Calculate Marginal Impact → Optimize → Allocate → Monitor → Reallocate → Audit.**
+
+---
+
+# Repository
+
+GitHub:
+
+https://github.com/crtl-freakssss/allocatai
